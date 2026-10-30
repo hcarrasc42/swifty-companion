@@ -1,6 +1,16 @@
 # Credenciales:
 .env
 
+# Flutter / Dart:
+.dart_tool/
+build/
+.flutter-plugins-dependencies
+.packages
+
+# IDE:
+.idea/
+*.iml
+
 # Archivos locales de trabajo:
 CLAUDE.md
 notas/
