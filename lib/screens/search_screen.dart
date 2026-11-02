@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../services/user_service.dart';
 import 'profile_screen.dart';
 
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, required this.users});
+
+  final UserService users;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -38,8 +41,11 @@ class _SearchScreenState extends State<SearchScreen> {
   void _search() {
     final login = _validate();
     if (login == null) return;
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => ProfileScreen(login: login)));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(login: login, users: widget.users),
+      ),
+    );
   }
 
   @override

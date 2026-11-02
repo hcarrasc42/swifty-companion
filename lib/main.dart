@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'screens/search_screen.dart';
 import 'services/auth_service.dart';
+import 'services/user_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,14 +14,14 @@ Future<void> main() async {
     clientSecret: dotenv.env['FT_SECRET'] ?? '',
   );
 
-  runApp(MyApp(auth: auth));
+  runApp(MyApp(users: UserService(auth: auth)));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.auth});
+  const MyApp({super.key, required this.users});
 
-  /// Se pasará a las pantallas que llamen a la API (paso 5).
-  final AuthService auth;
+  /// Se pasa a las pantallas que consultan la API.
+  final UserService users;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +30,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
       ),
-      home: const SearchScreen(),
+      home: SearchScreen(users: users),
     );
   }
 }

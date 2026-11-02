@@ -73,3 +73,18 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **Pruebas:** `test/auth_service_test.dart` comprueba la petición enviada, la reutilización, la caducidad y los tres errores. Además se verificó a mano contra la API real: respuesta HTTP 200, token `bearer` y `expires_in` de 7200.
 
 **Pregunta probable: ¿por qué no probaste en web?** Chrome puede bloquear las llamadas a la API de 42 por CORS (la política del navegador que exige que el servidor autorice el origen). Esa restricción solo afecta al navegador, no a una app de escritorio o móvil. Por eso la app se prueba en Linux desktop.
+
+## Paso 5 — Llamada a `/v2/users/:login` y modelo (`lib/services/user_service.dart`, `lib/models/user.dart`)
+
+**Qué hay:** un `UserService` que pide el perfil de un login con el token de `AuthService`, y un modelo `User` (con `Cursus`, `Skill` y `ProjectUser`) construido a partir del JSON.
+
+**Por qué así:**
+- **Solo se modela lo que se usa.** El JSON de 42 trae más de 40 campos; el modelo guarda login, nombre, email, puntos de corrección, cartera, foto, ubicación, cursus con sus skills y los proyectos. Si la API añade campos, la app no se rompe.
+- **Cabecera `Authorization: Bearer <token>`:** el token sale de `auth.getToken()`, así que se reutiliza entre búsquedas y se renueva solo si caduca.
+- **Nulos tratados a propósito.** `location` es `null` si el usuario no está en un puesto; `final_mark` y `validated?` son `null` en proyectos sin corregir; `cursus_users` puede venir vacío. Los tipos opcionales (`String?`, `bool?`) lo reflejan para que la pantalla no falle.
+- **Skill y porcentaje:** la API da el nivel como decimal (7.65); la parte entera es el nivel y la decimal el porcentaje (65 %), que calcula `Skill.percent`.
+- **Cursus principal:** un usuario puede tener varios (`C Piscine`, `42cursus`...). `mainCursus` elige `42cursus` (id 21) y, si no existe, el último.
+- **Proyectos suspendidos incluidos:** el modelo conserva todos con su `validated`; el filtrado y el aspecto se deciden en la pantalla (paso 6).
+- **Errores propios (`UserException`):** 404 (`notFound`), otro código HTTP, red caída y JSON inesperado. La interfaz los mostrará en el paso 7.
+- **Inyección:** `MyApp` recibe el `UserService`, y de ahí pasa a `SearchScreen` y `ProfileScreen`. `ProfileScreen` guarda el `Future` en el estado para no repetir la llamada en cada `build`.
+- **Pruebas:** `test/user_service_test.dart` comprueba la URL, la cabecera, el modelo (nulos, porcentaje, cursus principal, proyecto suspendido) y los tres errores. `widget_test.dart` usa un servicio falso. Además se revisó a mano un JSON real de la API (HTTP 200; 404 con un login inexistente).
