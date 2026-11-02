@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'profile_screen.dart';
+
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -36,8 +38,8 @@ class _SearchScreenState extends State<SearchScreen> {
   void _search() {
     final login = _validate();
     if (login == null) return;
-    // La navegación a la pantalla de perfil se añade en el paso 3.
-    debugPrint('Buscar: $login');
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => ProfileScreen(login: login)));
   }
 
   @override
