@@ -58,3 +58,18 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **`ProfileScreen` es `StatelessWidget`** por ahora: solo muestra un dato recibido. Pasará a cargar datos de la API en los pasos 5 y 6.
 - **Se navega con el login ya normalizado** (sin espacios y en minúsculas), validado en el paso 2.
 - **Test:** `test/widget_test.dart` comprueba que se navega con el login normalizado y que `pageBack` vuelve a la búsqueda.
+
+## Paso 4 — Autenticación con la API de 42 (`lib/services/auth_service.dart`)
+
+**Qué hay:** un `AuthService` que obtiene un token de acceso y lo reutiliza mientras sea válido. Las credenciales se leen del `.env` al arrancar (`main.dart`).
+
+**Por qué así:**
+- **OAuth2 `client_credentials`:** es el flujo para aplicaciones sin usuario que inicia sesión. La app se identifica con su `client_id` y `client_secret` (`FT_UID` y `FT_SECRET`) mediante un `POST` a `https://api.intra.42.fr/oauth/token` y recibe un token `bearer` que va en la cabecera `Authorization` de las demás peticiones. Con este flujo solo se accede a datos públicos, que es lo que pide el subject.
+- **Credenciales en `.env`:** el archivo está en `.gitignore`, así que no llega a GitHub; en el repo solo está `.env.example`, con los nombres de las variables. Se lee con `flutter_dotenv`, y para eso `.env` se declara como *asset* en `pubspec.yaml`.
+- **Limitación a conocer:** al ser un asset, el `.env` viaja dentro de la app compilada. En una app real el secret no debería estar en el cliente (iría en un backend); para este proyecto es lo que el subject plantea y se asume.
+- **Token guardado y reutilizado:** se guarda en memoria junto con su fecha de caducidad (`expires_in`, 7200 s = 2 h). `getToken()` devuelve el guardado mientras falte más de 30 s para que caduque, y pide uno nuevo si no. Así no se hace una petición de token por cada búsqueda.
+- **Errores propios (`AuthException`):** red caída, credenciales rechazadas (HTTP distinto de 200) o respuesta sin `access_token` se convierten en una excepción con mensaje claro. La interfaz podrá mostrarlo en el paso 7 sin depender de detalles de `http`.
+- **Cliente HTTP y reloj inyectables:** `AuthService` recibe el `http.Client` y la función de hora, lo que permite probarlo con un cliente simulado y un reloj falso, sin red ni esperas.
+- **Pruebas:** `test/auth_service_test.dart` comprueba la petición enviada, la reutilización, la caducidad y los tres errores. Además se verificó a mano contra la API real: respuesta HTTP 200, token `bearer` y `expires_in` de 7200.
+
+**Pregunta probable: ¿por qué no probaste en web?** Chrome puede bloquear las llamadas a la API de 42 por CORS (la política del navegador que exige que el servidor autorice el origen). Esa restricción solo afecta al navegador, no a una app de escritorio o móvil. Por eso la app se prueba en Linux desktop.
