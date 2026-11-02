@@ -46,3 +46,15 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **Layout:** `Padding` + `Center` + `ConstrainedBox(maxWidth: 480)`. El límite de ancho evita que el campo se estire en pantallas grandes o en horizontal.
 - **Estructura:** `main.dart` solo arranca la app; cada pantalla vive en `lib/screens/`, para que el proyecto crezca ordenado.
 - **Tests:** `test/widget_test.dart` comprueba que se muestran los errores con el campo vacío y con caracteres inválidos. Sustituye al test del contador de ejemplo.
+
+## Paso 3 — Navegación a la pantalla de perfil (`lib/screens/profile_screen.dart`)
+
+**Qué hay:** al pulsar "Buscar" con un login válido se abre una segunda pantalla que muestra ese login, con una flecha para volver atrás.
+
+**Por qué así:**
+- **`Navigator.push` con `MaterialPageRoute`:** Flutter gestiona las pantallas como una pila. `push` apila la nueva encima de la de búsqueda; no se destruye la anterior, así que al volver el usuario encuentra el campo como lo dejó.
+- **Botón "atrás" gratis:** al haber una ruta debajo en la pila, el `AppBar` dibuja solo la flecha y el gesto/botón de atrás del sistema hace `pop`. No hay que programarlo.
+- **El login viaja por el constructor** (`ProfileScreen(login: login)`): es la forma más simple de pasar datos entre pantallas y deja la pantalla de perfil independiente de la de búsqueda.
+- **`ProfileScreen` es `StatelessWidget`** por ahora: solo muestra un dato recibido. Pasará a cargar datos de la API en los pasos 5 y 6.
+- **Se navega con el login ya normalizado** (sin espacios y en minúsculas), validado en el paso 2.
+- **Test:** `test/widget_test.dart` comprueba que se navega con el login normalizado y que `pageBack` vuelve a la búsqueda.

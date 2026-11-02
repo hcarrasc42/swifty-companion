@@ -23,4 +23,20 @@ void main() {
 
     expect(find.text('Solo letras, números, "-" y "_"'), findsOneWidget);
   });
+
+  testWidgets('navega al perfil con el login y vuelve atrás', (tester) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.enterText(find.byType(TextField), '  Hcarrasc ');
+    await tester.tap(find.text('Buscar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Perfil de hcarrasc'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Perfil de hcarrasc'), findsNothing);
+    expect(find.text('Buscar'), findsOneWidget);
+  });
 }
