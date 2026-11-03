@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/user.dart';
 import '../services/user_service.dart';
+import '../widgets/error_view.dart';
 import '../widgets/level_bar.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/project_tile.dart';
@@ -18,8 +19,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   // Se guarda el Future en el estado: si se creara dentro de build(), cada
-  // reconstrucción volvería a llamar a la API.
-  late final Future<User> _user = widget.users.fetchUser(widget.login);
+  // reconstrucción volvería a llamar a la API. Solo cambia al reintentar.
+  late Future<User> _user = widget.users.fetchUser(widget.login);
 
   /// Cursus elegido en el selector. Mientras sea null se muestra el principal.
   int? _cursusId;
@@ -33,19 +34,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: FutureBuilder<User>(
         future: _user,
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            final error = snapshot.error;
-            return Center(
-              child: Text(error is UserException ? error.message : '$error'),
-            );
-          }
-          if (!snapshot.hasData) {
+          // Primero el estado de carga: al reintentar, el snapshot conserva el
+          // error anterior hasta que termina la nueva petición.
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return ErrorView(error: snapshot.error, onRetry: _retry);
           }
           return _buildProfile(snapshot.data!);
         },
       ),
     );
+  }
+
+  void _retry() {
+    // Con llaves y no con `=>`: setState no admite un callback que devuelva
+    // un Future, y la flecha devolvería el valor de la asignación.
+    setState(() {
+      _user = widget.users.fetchUser(widget.login);
+    });
   }
 
   Widget _buildProfile(User user) {
