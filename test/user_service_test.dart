@@ -3,8 +3,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:swifty_companion/services/api_exception.dart';
 import 'package:swifty_companion/services/auth_service.dart';
 import 'package:swifty_companion/services/user_service.dart';
+
+import 'matchers.dart';
 
 const _userJson = {
   'login': 'jdoe',
@@ -90,24 +93,80 @@ void main() {
     expect(user.projects.last.finalMark, isNull);
   });
 
-  test('404 lanza UserException con notFound', () async {
+  test('404 lanza ApiError.notFound', () async {
     final users = _service((_) => http.Response('{}', 404));
 
-    expect(
-      users.fetchUser('nadie'),
-      throwsA(isA<UserException>().having((e) => e.notFound, 'notFound', true)),
-    );
+    expect(users.fetchUser('nadie'), throwsApiError(ApiError.notFound));
   });
 
-  test('otro código HTTP lanza UserException', () async {
+  test('401 lanza ApiError.unauthorized y pide otro token después', () async {
+    var tokens = 0;
+    var status = 401;
+    final users = UserService(
+      auth: AuthService(
+        clientId: 'id',
+        clientSecret: 'secret',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'access_token': 'tok${++tokens}', 'expires_in': 7200}),
+            200,
+          ),
+        ),
+      ),
+      client: MockClient(
+        (_) async => http.Response(jsonEncode(_userJson), status),
+      ),
+    );
+
+    await expectLater(
+      users.fetchUser('jdoe'),
+      throwsApiError(ApiError.unauthorized),
+    );
+    status = 200;
+    await users.fetchUser('jdoe');
+    expect(tokens, 2);
+  });
+
+  test('429 lanza ApiError.rateLimited', () async {
+    final users = _service((_) => http.Response('{}', 429));
+
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.rateLimited));
+  });
+
+  test('5xx lanza ApiError.server', () async {
     final users = _service((_) => http.Response('{}', 500));
 
-    expect(users.fetchUser('jdoe'), throwsA(isA<UserException>()));
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.server));
   });
 
-  test('JSON inesperado lanza UserException', () async {
+  test('sin red lanza ApiError.network', () async {
+    final users = _service((_) => throw http.ClientException('sin red'));
+
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.network));
+  });
+
+  test('JSON inesperado lanza ApiError.badResponse', () async {
     final users = _service((_) => http.Response('[1, 2]', 200));
 
-    expect(users.fetchUser('jdoe'), throwsA(isA<UserException>()));
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.badResponse));
+  });
+
+  test('JSON sin campos obligatorios lanza ApiError.badResponse', () async {
+    final users = _service((_) => http.Response('{"login": 42}', 200));
+
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.badResponse));
+  });
+
+  test('un fallo del token llega como ApiException', () async {
+    final users = UserService(
+      auth: AuthService(
+        clientId: 'id',
+        clientSecret: 'mal',
+        client: MockClient((_) async => http.Response('{}', 401)),
+      ),
+      client: MockClient((_) async => http.Response('{}', 200)),
+    );
+
+    expect(users.fetchUser('jdoe'), throwsApiError(ApiError.credentials));
   });
 }

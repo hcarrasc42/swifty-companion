@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:swifty_companion/services/api_exception.dart';
 import 'package:swifty_companion/services/auth_service.dart';
+
+import 'matchers.dart';
 
 http.Response _ok(String token, {int expiresIn = 7200}) => http.Response(
   jsonEncode({'access_token': token, 'expires_in': expiresIn}),
@@ -59,33 +62,95 @@ void main() {
     expect(await auth.getToken(), 'tok2');
   });
 
-  test('credenciales rechazadas lanzan AuthException', () async {
+  test('credenciales rechazadas lanzan ApiError.credentials', () async {
     final auth = AuthService(
       clientId: 'id',
       clientSecret: 'mal',
       client: MockClient((_) async => http.Response('{}', 401)),
     );
 
-    expect(auth.getToken(), throwsA(isA<AuthException>()));
+    expect(auth.getToken(), throwsApiError(ApiError.credentials));
   });
 
-  test('sin red lanza AuthException', () async {
+  test('sin credenciales no llama a la API', () async {
+    var calls = 0;
+    final auth = AuthService(
+      clientId: '',
+      clientSecret: '',
+      client: MockClient((_) async {
+        calls++;
+        return _ok('tok');
+      }),
+    );
+
+    await expectLater(auth.getToken(), throwsApiError(ApiError.credentials));
+    expect(calls, 0);
+  });
+
+  test('sin red lanza ApiError.network', () async {
     final auth = AuthService(
       clientId: 'id',
       clientSecret: 'secret',
       client: MockClient((_) async => throw http.ClientException('sin red')),
     );
 
-    expect(auth.getToken(), throwsA(isA<AuthException>()));
+    expect(auth.getToken(), throwsApiError(ApiError.network));
   });
 
-  test('respuesta sin access_token lanza AuthException', () async {
+  test('si la API no responde a tiempo lanza ApiError.timeout', () async {
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      timeout: const Duration(milliseconds: 10),
+      client: MockClient((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        return _ok('tok');
+      }),
+    );
+
+    expect(auth.getToken(), throwsApiError(ApiError.timeout));
+  });
+
+  test('error del servidor lanza ApiError.server', () async {
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      client: MockClient((_) async => http.Response('', 503)),
+    );
+
+    expect(auth.getToken(), throwsApiError(ApiError.server));
+  });
+
+  test('respuesta sin access_token lanza ApiError.badResponse', () async {
     final auth = AuthService(
       clientId: 'id',
       clientSecret: 'secret',
       client: MockClient((_) async => http.Response('{"foo":1}', 200)),
     );
 
-    expect(auth.getToken(), throwsA(isA<AuthException>()));
+    expect(auth.getToken(), throwsApiError(ApiError.badResponse));
+  });
+
+  test('respuesta en HTML lanza ApiError.badResponse', () async {
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      client: MockClient((_) async => http.Response('<html></html>', 200)),
+    );
+
+    expect(auth.getToken(), throwsApiError(ApiError.badResponse));
+  });
+
+  test('invalidate descarta el token guardado', () async {
+    var calls = 0;
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      client: MockClient((_) async => _ok('tok${++calls}')),
+    );
+
+    expect(await auth.getToken(), 'tok1');
+    auth.invalidate();
+    expect(await auth.getToken(), 'tok2');
   });
 }
