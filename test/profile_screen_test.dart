@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swifty_companion/models/user.dart';
 import 'package:swifty_companion/screens/profile_screen.dart';
+import 'package:swifty_companion/services/api_exception.dart';
 
 import 'fake_user_service.dart';
 
@@ -94,6 +95,64 @@ void main() {
     expect(find.byIcon(Icons.cancel), findsOneWidget);
     expect(find.text('En curso'), findsOneWidget);
     expect(find.text('C Piscine Shell 00'), findsNothing);
+  });
+
+  testWidgets('login inexistente: mensaje y botón para volver', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          login: 'nadie',
+          users: FakeUserService(null, [
+            const ApiException(ApiError.notFound, 'No existe "nadie"'),
+          ]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No existe "nadie"'), findsOneWidget);
+    expect(find.text('Volver'), findsOneWidget);
+    expect(find.text('Reintentar'), findsNothing);
+  });
+
+  testWidgets('sin red: reintentar vuelve a cargar el perfil', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          login: 'jdoe',
+          users: FakeUserService(_user, [
+            const ApiException(ApiError.network, 'Sin conexión'),
+          ]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sin conexión'), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_off), findsOneWidget);
+
+    await tester.tap(find.text('Reintentar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sin conexión'), findsNothing);
+    expect(find.text('John Doe'), findsOneWidget);
+  });
+
+  testWidgets('un error que no es de la API muestra un mensaje genérico', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          login: 'jdoe',
+          users: FakeUserService(null, [StateError('detalle interno')]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ha ocurrido un error inesperado'), findsOneWidget);
+    expect(find.textContaining('detalle interno'), findsNothing);
   });
 
   testWidgets('cambia de cursus con el selector', (tester) async {

@@ -25,7 +25,7 @@ class ProfileHeader extends StatelessWidget {
           foregroundImage: image == null ? null : NetworkImage(image),
           onForegroundImageError: image == null ? null : (error, stack) {},
           child: Text(
-            user.login[0].toUpperCase(),
+            user.login.isEmpty ? '?' : user.login[0].toUpperCase(),
             style: theme.textTheme.headlineMedium,
           ),
         ),
