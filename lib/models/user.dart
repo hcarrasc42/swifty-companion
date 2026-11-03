@@ -1,3 +1,7 @@
+/// Porcentaje de progreso dentro del nivel actual: la parte decimal de [level]
+/// (7.65 → 65).
+int levelPercent(double level) => ((level - level.floor()) * 100).round();
+
 /// Habilidad de un cursus con su nivel (p. ej. 7.65 = nivel 7, 65 %).
 class Skill {
   const Skill({required this.name, required this.level});
@@ -10,8 +14,7 @@ class Skill {
   final String name;
   final double level;
 
-  /// Porcentaje de progreso dentro del nivel actual (la parte decimal).
-  int get percent => ((level - level.floor()) * 100).round();
+  int get percent => levelPercent(level);
 }
 
 /// Cursus de un usuario: nivel global y habilidades.
