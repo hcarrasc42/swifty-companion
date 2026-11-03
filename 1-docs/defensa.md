@@ -88,3 +88,19 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **Errores propios (`UserException`):** 404 (`notFound`), otro código HTTP, red caída y JSON inesperado. La interfaz los mostrará en el paso 7.
 - **Inyección:** `MyApp` recibe el `UserService`, y de ahí pasa a `SearchScreen` y `ProfileScreen`. `ProfileScreen` guarda el `Future` en el estado para no repetir la llamada en cada `build`.
 - **Pruebas:** `test/user_service_test.dart` comprueba la URL, la cabecera, el modelo (nulos, porcentaje, cursus principal, proyecto suspendido) y los tres errores. `widget_test.dart` usa un servicio falso. Además se revisó a mano un JSON real de la API (HTTP 200; 404 con un login inexistente).
+
+## Paso 6 — Pantalla de perfil (`lib/screens/profile_screen.dart`, `lib/widgets/`)
+
+**Qué hay:** foto, nombre y login; nivel del cursus con barra; una tarjeta con email, ubicación, wallet y puntos de corrección; las skills con su nivel y porcentaje; y todos los proyectos, incluidos los suspendidos. Si el usuario tiene varios cursus, un selector cambia el nivel, las skills y los proyectos que se muestran.
+
+**Por qué así:**
+- **Cumple el subject:** más de 4 datos (login, nombre, email, ubicación, wallet, puntos de corrección, nivel), la foto, skills con nivel y porcentaje, y proyectos aprobados y suspendidos.
+- **Widgets separados en `lib/widgets/`:** `ProfileHeader` (cabecera y datos), `LevelBar` y `ProjectTile`. Cada uno hace una cosa y la pantalla solo los compone. `LevelBar` sirve tanto para el nivel del cursus como para cada skill, así el porcentaje se calcula y se dibuja igual en los dos sitios (`levelPercent` en el modelo).
+- **Nivel y porcentaje:** 7.65 se muestra como "Nivel 7 · 65 %" con una `LinearProgressIndicator` al 65 %.
+- **Proyectos con tres estados:** `validated` true → icono verde y nota; false → icono rojo y nota (suspendido); null → icono gris y el estado traducido ("En curso", "Por corregir"...). Se usa un `switch` sobre `bool?` que obliga a tratar los tres casos.
+- **Selector de cursus:** cada proyecto trae `cursus_ids`, así que se filtran los del cursus elegido. Por defecto se muestra el principal (`42cursus`). Sin el filtro, los proyectos de la Piscine y los del cursus saldrían mezclados. El cursus elegido es estado de la pantalla (`_cursusId` + `setState`).
+- **Foto con alternativa:** `CircleAvatar` con la foto como `foregroundImage` y la inicial debajo. Si no hay foto, tarda en cargar o falla la descarga, se ve la inicial y la pantalla no se rompe. En la red de 42 el CDN de fotos (`cdn.intra.42.fr`) respondió 403 a cualquier cliente durante las pruebas, así que este caso no es teórico.
+- **`ListView`:** el contenido es más alto que la pantalla (un usuario con el cursus avanzado tiene decenas de proyectos), así que tiene que poder desplazarse.
+- **`Expanded` en `LevelBar`:** el nombre de la skill ocupa el ancho que sobra y se corta con "..." si es largo, para no empujar el nivel fuera de la pantalla.
+- **Ancho máximo de 600:** en pantallas anchas el contenido no se estira de lado a lado. El responsive completo llega en el paso 8.
+- **Pruebas:** `test/profile_screen_test.dart` comprueba los datos, el nivel y las skills del cursus principal, los proyectos (con uno suspendido y otro en curso) y el cambio de cursus con el selector. El servicio falso se movió a `test/fake_user_service.dart` para compartirlo entre los tests. Además se probó en Linux con un login real: datos, skills y proyectos correctos, y en la Piscine aparecen los suspendidos en rojo.
