@@ -155,6 +155,39 @@ void main() {
     expect(find.textContaining('detalle interno'), findsNothing);
   });
 
+  // Tamaños en píxeles lógicos: móvil en vertical y en horizontal, y tablet.
+  // Un overflow lanza un error de Flutter y hace fallar el test.
+  for (final (name, size, columns) in [
+    ('móvil en vertical', const Size(360, 740), 1),
+    ('móvil en horizontal', const Size(740, 360), 2),
+    ('tablet', const Size(1280, 800), 2),
+  ]) {
+    testWidgets('$name: $columns columna(s) y sin overflow', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileScreen(login: 'jdoe', users: FakeUserService(_user)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Una ListView por columna.
+      expect(find.byType(ListView), findsNWidgets(columns));
+      expect(find.text('John Doe'), findsOneWidget);
+      // En una columna los proyectos quedan debajo: la ListView solo
+      // construye lo visible, así que hay que desplazarse hasta ellos.
+      await tester.scrollUntilVisible(
+        find.text('Proyectos (3)'),
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(find.text('Proyectos (3)'), findsOneWidget);
+    });
+  }
+
   testWidgets('cambia de cursus con el selector', (tester) async {
     await _pumpProfile(tester);
 

@@ -52,29 +52,34 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Swifty Companion')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
+      // SingleChildScrollView: en un móvil en horizontal, con el teclado
+      // abierto, la altura libre es menor que el formulario y sin scroll
+      // daría overflow. SafeArea evita el notch en horizontal.
+      body: SafeArea(
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _controller,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => _search(),
-                  decoration: InputDecoration(
-                    labelText: 'Login de 42',
-                    border: const OutlineInputBorder(),
-                    errorText: _error,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _controller,
+                    autocorrect: false,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _search(),
+                    decoration: InputDecoration(
+                      labelText: 'Login de 42',
+                      border: const OutlineInputBorder(),
+                      errorText: _error,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: _search, child: const Text('Buscar')),
-              ],
+                  const SizedBox(height: 16),
+                  FilledButton(onPressed: _search, child: const Text('Buscar')),
+                ],
+              ),
             ),
           ),
         ),
