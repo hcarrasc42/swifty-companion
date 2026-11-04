@@ -147,3 +147,21 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **`SafeArea`:** en horizontal el notch y las esquinas redondeadas quedan a los lados, donde el `AppBar` no protege. `SafeArea` añade ese margen solo en los dispositivos que lo necesitan.
 - **Lo que ya era flexible:** `LevelBar` corta los nombres largos con `Expanded` y "...", y `ErrorView` ya tenía scroll y ancho máximo.
 - **Pruebas:** en `profile_screen_test.dart`, el perfil a 360×740 (móvil en vertical: una columna), 740×360 (móvil en horizontal: dos) y 1280×800 (tablet: dos). En `widget_test.dart`, la búsqueda a 740×360 con 200 px de teclado. En los tests de widgets, un overflow es un error que hace fallar el test, así que pasar demuestra que no hay overflow con esos tamaños.
+
+## Paso 9 — Bonus: renovar el token (`lib/services/user_service.dart`, `lib/services/auth_service.dart`)
+
+**Qué hay:** el token se renueva solo en los dos casos en que deja de valer, sin que el usuario lo note:
+
+1. **Caduca (lo normal).** El token de 42 dura 2 horas (`expires_in: 7200`). `AuthService` guarda cuándo caduca y, si faltan menos de 30 s, `getToken()` pide uno nuevo antes de usarlo. Esto ya estaba desde el paso 4.
+2. **La API lo rechaza antes de tiempo (401).** Por ejemplo, si se regenera el secret en la intra o la API revoca el token. Ahora `fetchUser` descarta el token, pide uno nuevo y repite la petición. Antes de este paso, el usuario veía "La sesión con la API caducó" y tenía que pulsar "Reintentar".
+
+**Por qué así:**
+- **Renovar antes de caducar, no después:** si se esperara al 401 para renovar, cada 2 horas una búsqueda fallaría y habría que repetirla. El margen de 30 s evita enviar un token que caduque mientras viaja la petición.
+- **No renovar en cada búsqueda:** pedir un token por petición gastaría el límite de la API (2 peticiones por segundo) y duplicaría la espera. El token se reutiliza mientras vale.
+- **Un solo reintento:** si el token nuevo también da 401, el problema no es el token (por ejemplo, las credenciales ya no valen) y repetir sin límite sería un bucle infinito. Tras el segundo 401 se muestra el error con "Reintentar", y el token se descarta para que ese reintento empiece con otro.
+- **Solo con 401:** un 404, un 429 o un fallo de red no tienen nada que ver con el token, así que se muestran tal cual (paso 7).
+- **`_get()` aparte:** la petición (pedir el token + `GET` con la cabecera `Authorization`) está en un método propio, así el reintento la repite sin duplicar código.
+- **Por qué en `UserService` y no en `AuthService`:** `AuthService` no sabe si un token funciona; lo sabe quien lo usa y recibe el 401. `AuthService` solo ofrece `invalidate()` para descartarlo.
+- **Cómo probarlo a mano:** dos opciones del `.env`, solo en modo debug: `DEBUG_TOKEN_LIFETIME=60` acorta la vida del token para ver la renovación sin esperar 2 horas, y `DEBUG_INVALID_TOKEN=true` empieza con un token falso que 42 rechaza de verdad (401). La terminal escribe cuándo se pide un token, nunca el token. En release (`kDebugMode` falso) se ignoran, así que no cambian la app real. El paso a paso está en `1-docs/pruebas.md`.
+- **Lo que hace 42:** si la app pide un token cuando el anterior aún vale, la API devuelve el mismo con el tiempo que le queda (`expires_in` menor que 7200). Por eso se usa `expires_in` y no se supone que siempre son 2 horas.
+- **Pruebas:** en `user_service_test.dart`, con una API falsa que responde los códigos que se le pasan y un servicio de token que da `tok1`, `tok2`... Se comprueba que 401 + 200 devuelve el usuario sin error, con dos tokens distintos en las peticiones; que 401 + 401 da `unauthorized` tras solo dos peticiones (sin bucle); que el "Reintentar" posterior usa un tercer token; y que sin 401 el token se reutiliza. Con el código del paso 8, los tres tests del 401 fallan. `auth_service_test.dart` prueba la caducidad con un reloj falso, y también las dos opciones de depuración. Además se probaron las dos contra la API real: con el token falso, 42 responde 401, la app pide otro y carga el perfil; con la vida acortada, el token se reutiliza mientras vale y se pide otro al caducar.

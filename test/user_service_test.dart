@@ -99,32 +99,79 @@ void main() {
     expect(users.fetchUser('nadie'), throwsApiError(ApiError.notFound));
   });
 
-  test('401 lanza ApiError.unauthorized y pide otro token después', () async {
-    var tokens = 0;
-    var status = 401;
-    final users = UserService(
-      auth: AuthService(
-        clientId: 'id',
-        clientSecret: 'secret',
-        client: MockClient(
-          (_) async => http.Response(
-            jsonEncode({'access_token': 'tok${++tokens}', 'expires_in': 7200}),
-            200,
+  group('401 (token rechazado)', () {
+    late int tokens;
+    late List<String?> sentTokens;
+
+    /// La API de usuarios responde con [statuses] en orden; el servicio de
+    /// token da `tok1`, `tok2`... y cuenta cuántos ha dado.
+    UserService service(List<int> statuses) {
+      tokens = 0;
+      sentTokens = [];
+      return UserService(
+        auth: AuthService(
+          clientId: 'id',
+          clientSecret: 'secret',
+          client: MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'access_token': 'tok${++tokens}',
+                'expires_in': 7200,
+              }),
+              200,
+            ),
           ),
         ),
-      ),
-      client: MockClient(
-        (_) async => http.Response(jsonEncode(_userJson), status),
-      ),
-    );
+        client: MockClient((request) async {
+          sentTokens.add(request.headers['Authorization']);
+          return http.Response(jsonEncode(_userJson), statuses.removeAt(0));
+        }),
+      );
+    }
 
-    await expectLater(
-      users.fetchUser('jdoe'),
-      throwsApiError(ApiError.unauthorized),
-    );
-    status = 200;
-    await users.fetchUser('jdoe');
-    expect(tokens, 2);
+    test('pide otro token y repite la petición sin dar error', () async {
+      final users = service([401, 200]);
+
+      final user = await users.fetchUser('jdoe');
+
+      expect(user.login, 'jdoe');
+      expect(tokens, 2);
+      expect(sentTokens, ['Bearer tok1', 'Bearer tok2']);
+    });
+
+    test('si el token nuevo también falla, lanza unauthorized', () async {
+      final users = service([401, 401]);
+
+      await expectLater(
+        users.fetchUser('jdoe'),
+        throwsApiError(ApiError.unauthorized),
+      );
+      // Un solo reintento: dos peticiones y dos tokens, no un bucle.
+      expect(sentTokens, hasLength(2));
+      expect(tokens, 2);
+    });
+
+    test('tras el error, reintentar empieza con un token nuevo', () async {
+      final users = service([401, 401, 200]);
+
+      await expectLater(
+        users.fetchUser('jdoe'),
+        throwsApiError(ApiError.unauthorized),
+      );
+      await users.fetchUser('jdoe');
+
+      expect(tokens, 3);
+      expect(sentTokens.last, 'Bearer tok3');
+    });
+
+    test('sin 401, el token se reutiliza entre búsquedas', () async {
+      final users = service([200, 200]);
+
+      await users.fetchUser('jdoe');
+      await users.fetchUser('jdoe');
+
+      expect(tokens, 1);
+    });
   });
 
   test('429 lanza ApiError.rateLimited', () async {

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_exception.dart';
@@ -13,6 +14,7 @@ class AuthService {
     http.Client? client,
     DateTime Function()? now,
     this.timeout = apiTimeout,
+    this.maxLifetime,
   }) : _client = client ?? http.Client(),
        _now = now ?? DateTime.now;
 
@@ -24,6 +26,11 @@ class AuthService {
   final String clientId;
   final String clientSecret;
   final Duration timeout;
+
+  /// Si se indica y es menor que `expires_in`, el token se da por caducado
+  /// antes. Solo sirve para probar a mano la renovación sin esperar 2 horas.
+  final Duration? maxLifetime;
+
   final http.Client _client;
   final DateTime Function() _now;
 
@@ -43,6 +50,13 @@ class AuthService {
   void invalidate() {
     _token = null;
     _expiresAt = null;
+  }
+
+  /// Guarda un token que la API rechazará, para probar a mano el reintento
+  /// tras un 401 contra la API real.
+  void debugUseInvalidToken() {
+    _token = 'token-invalido';
+    _expiresAt = _now().add(const Duration(hours: 1));
   }
 
   Future<String> _requestToken() async {
@@ -96,8 +110,16 @@ class AuthService {
       );
     }
 
+    var lifetime = Duration(seconds: body['expires_in'] as int);
+    final max = maxLifetime;
+    if (max != null && max < lifetime) lifetime = max;
+
     _token = body['access_token'] as String;
-    _expiresAt = _now().add(Duration(seconds: body['expires_in'] as int));
+    _expiresAt = _now().add(lifetime);
+    // Sin el token: solo cuándo se pidió y cuánto dura.
+    if (kDebugMode) {
+      debugPrint('[auth] token nuevo, válido ${lifetime.inSeconds} s');
+    }
     return _token!;
   }
 }
