@@ -7,6 +7,10 @@ import '../widgets/level_bar.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/project_tile.dart';
 
+/// Ancho a partir del cual el perfil pasa a dos columnas. Es el límite que
+/// usa Material 3 entre pantalla "compacta" (móvil en vertical) y "mediana".
+const wideLayoutBreakpoint = 600.0;
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, required this.login, required this.users});
 
@@ -65,53 +69,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
             for (final p in user.projects)
               if (p.cursusIds.contains(cursus.id)) p,
           ];
-    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    final summary = _summarySection(user, cursus);
+    final projectList = _projectsSection(projects);
 
-    // ListView porque el contenido (sobre todo los proyectos) no cabe en una
-    // pantalla y hay que poder desplazarlo.
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            ProfileHeader(user: user, cursus: cursus),
-            if (user.cursus.length > 1) ...[
-              const SizedBox(height: 16),
-              DropdownButton<int>(
-                isExpanded: true,
-                value: cursus!.id,
-                items: [
-                  for (final c in user.cursus)
-                    DropdownMenuItem(value: c.id, child: Text(c.name)),
-                ],
-                onChanged: (id) => setState(() => _cursusId = id),
-              ),
-            ],
-            const SizedBox(height: 24),
-            Text('Skills', style: titleStyle),
-            const SizedBox(height: 8),
-            if (cursus == null || cursus.skills.isEmpty)
-              const Text('Sin skills en este cursus')
-            else
-              for (final skill in cursus.skills)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: LevelBar(label: skill.name, level: skill.level),
+    // SafeArea: en horizontal, el notch o la barra de gestos tapan los lados.
+    // LayoutBuilder da el ancho disponible real (no el de toda la pantalla),
+    // y con él se elige el layout.
+    return SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // ListView porque el contenido (sobre todo los proyectos) no cabe
+          // en una pantalla y hay que poder desplazarlo.
+          if (constraints.maxWidth < wideLayoutBreakpoint) {
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ...summary,
+                    const SizedBox(height: 16),
+                    ...projectList,
+                  ],
                 ),
-            const SizedBox(height: 16),
-            Text('Proyectos (${projects.length})', style: titleStyle),
-            if (projects.isEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Sin proyectos en este cursus'),
-              )
-            else
-              for (final project in projects) ProjectTile(project: project),
-          ],
-        ),
+              ),
+            );
+          }
+          // Pantalla ancha (tablet, o móvil en horizontal): dos columnas que
+          // se reparten el ancho con Expanded, cada una con su propio scroll.
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1100),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: summary,
+                    ),
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: projectList,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
+  }
+
+  /// Cabecera, selector de cursus y skills.
+  List<Widget> _summarySection(User user, Cursus? cursus) {
+    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    return [
+      ProfileHeader(user: user, cursus: cursus),
+      if (user.cursus.length > 1) ...[
+        const SizedBox(height: 16),
+        DropdownButton<int>(
+          isExpanded: true,
+          value: cursus!.id,
+          items: [
+            for (final c in user.cursus)
+              DropdownMenuItem(value: c.id, child: Text(c.name)),
+          ],
+          onChanged: (id) => setState(() => _cursusId = id),
+        ),
+      ],
+      const SizedBox(height: 24),
+      Text('Skills', style: titleStyle),
+      const SizedBox(height: 8),
+      if (cursus == null || cursus.skills.isEmpty)
+        const Text('Sin skills en este cursus')
+      else
+        for (final skill in cursus.skills)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: LevelBar(label: skill.name, level: skill.level),
+          ),
+    ];
+  }
+
+  List<Widget> _projectsSection(List<ProjectUser> projects) {
+    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    return [
+      Text('Proyectos (${projects.length})', style: titleStyle),
+      if (projects.isEmpty)
+        const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('Sin proyectos en este cursus'),
+        )
+      else
+        for (final project in projects) ProjectTile(project: project),
+    ];
   }
 
   Cursus? _selectedCursus(User user) {

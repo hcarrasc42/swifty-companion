@@ -26,6 +26,23 @@ void main() {
     expect(find.text('Solo letras, números, "-" y "_"'), findsOneWidget);
   });
 
+  testWidgets('móvil en horizontal con el teclado abierto: sin overflow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(740, 360);
+    tester.view.devicePixelRatio = 1;
+    // El teclado ocupa la parte de abajo: quedan ~100 px para el formulario.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(MyApp(users: FakeUserService()));
+    await tester.pumpAndSettle();
+
+    // Con scroll, el botón se alcanza aunque no quepa a la vista.
+    await tester.ensureVisible(find.text('Buscar'));
+    expect(find.text('Buscar'), findsOneWidget);
+  });
+
   testWidgets('navega al perfil con el login y vuelve atrás', (tester) async {
     await tester.pumpWidget(MyApp(users: FakeUserService()));
 
