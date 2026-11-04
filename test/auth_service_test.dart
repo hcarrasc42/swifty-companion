@@ -62,6 +62,38 @@ void main() {
     expect(await auth.getToken(), 'tok2');
   });
 
+  test('maxLifetime acorta la vida del token', () async {
+    var calls = 0;
+    var now = DateTime(2026);
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      now: () => now,
+      maxLifetime: const Duration(seconds: 60),
+      client: MockClient((_) async => _ok('tok${++calls}')),
+    );
+
+    expect(await auth.getToken(), 'tok1');
+    // 60 s de vida menos el margen de 30 s: a los 31 s ya se renueva,
+    // aunque la API dijera 7200.
+    now = now.add(const Duration(seconds: 31));
+    expect(await auth.getToken(), 'tok2');
+  });
+
+  test('debugUseInvalidToken guarda un token sin pedirlo', () async {
+    var calls = 0;
+    final auth = AuthService(
+      clientId: 'id',
+      clientSecret: 'secret',
+      client: MockClient((_) async => _ok('tok${++calls}')),
+    );
+
+    auth.debugUseInvalidToken();
+
+    expect(await auth.getToken(), 'token-invalido');
+    expect(calls, 0);
+  });
+
   test('credenciales rechazadas lanzan ApiError.credentials', () async {
     final auth = AuthService(
       clientId: 'id',
