@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/user.dart';
@@ -22,22 +23,24 @@ class UserService {
 
   /// Lanza [ApiException] si falla cualquier paso, también al pedir el token.
   Future<User> fetchUser(String login) async {
-    final token = await auth.getToken();
+    var response = await _get(login);
 
-    final response = await sendRequest(
-      () => _client.get(
-        Uri.parse('$_baseUrl/${Uri.encodeComponent(login)}'),
-        headers: {'Authorization': 'Bearer $token'},
-      ),
-      timeout: timeout,
-    );
+    // 401: el token ya no vale aunque no había caducado (revocado, o la API
+    // lo invalidó antes de tiempo). Se pide uno nuevo y se repite la
+    // petición una sola vez: si la API rechazara todos los tokens, repetir
+    // sin límite sería un bucle infinito.
+    if (response.statusCode == 401) {
+      if (kDebugMode) debugPrint('[users] 401: se pide otro token y se repite');
+      auth.invalidate();
+      response = await _get(login);
+    }
 
     switch (response.statusCode) {
       case 200:
         break;
       case 401:
-        // El token ya no vale (revocado o caducado antes de tiempo). Se
-        // descarta para que el siguiente intento pida uno nuevo.
+        // También rechazó el token nuevo. Se descarta igualmente para que
+        // "Reintentar" empiece con otro.
         auth.invalidate();
         throw const ApiException(
           ApiError.unauthorized,
@@ -62,5 +65,17 @@ class UserService {
         'Respuesta de usuario inesperada',
       );
     }
+  }
+
+  /// Una petición con el token vigente (o uno nuevo si caducó).
+  Future<http.Response> _get(String login) async {
+    final token = await auth.getToken();
+    return sendRequest(
+      () => _client.get(
+        Uri.parse('$_baseUrl/${Uri.encodeComponent(login)}'),
+        headers: {'Authorization': 'Bearer $token'},
+      ),
+      timeout: timeout,
+    );
   }
 }
