@@ -5,9 +5,17 @@ import 'level_bar.dart';
 
 /// Foto, nombre y datos básicos del usuario.
 class ProfileHeader extends StatelessWidget {
-  const ProfileHeader({super.key, required this.user, this.cursus});
+  const ProfileHeader({
+    super.key,
+    required this.user,
+    this.cursus,
+    this.imageHeaders = const {},
+  });
 
   final User user;
+
+  /// Cabeceras de la petición de la foto (el token: el CDN de 42 lo exige).
+  final Map<String, String> imageHeaders;
 
   /// Cursus seleccionado, del que se muestra el nivel. Null si no tiene.
   final Cursus? cursus;
@@ -22,7 +30,9 @@ class ProfileHeader extends StatelessWidget {
         // usuario no tiene foto o si la descarga falla.
         CircleAvatar(
           radius: 56,
-          foregroundImage: image == null ? null : NetworkImage(image),
+          foregroundImage: image == null
+              ? null
+              : NetworkImage(image, headers: imageHeaders),
           onForegroundImageError: image == null ? null : (error, stack) {},
           child: Text(
             user.login.isEmpty ? '?' : user.login[0].toUpperCase(),

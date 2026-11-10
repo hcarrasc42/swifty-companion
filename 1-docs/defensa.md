@@ -165,3 +165,74 @@ Escribo el código en **Dart**, con el framework **Flutter**, usando **Android S
 - **Cómo probarlo a mano:** dos opciones del `.env`, solo en modo debug: `DEBUG_TOKEN_LIFETIME=60` acorta la vida del token para ver la renovación sin esperar 2 horas, y `DEBUG_INVALID_TOKEN=true` empieza con un token falso que 42 rechaza de verdad (401). La terminal escribe cuándo se pide un token, nunca el token. En release (`kDebugMode` falso) se ignoran, así que no cambian la app real. El paso a paso está en `1-docs/pruebas.md`.
 - **Lo que hace 42:** si la app pide un token cuando el anterior aún vale, la API devuelve el mismo con el tiempo que le queda (`expires_in` menor que 7200). Por eso se usa `expires_in` y no se supone que siempre son 2 horas.
 - **Pruebas:** en `user_service_test.dart`, con una API falsa que responde los códigos que se le pasan y un servicio de token que da `tok1`, `tok2`... Se comprueba que 401 + 200 devuelve el usuario sin error, con dos tokens distintos en las peticiones; que 401 + 401 da `unauthorized` tras solo dos peticiones (sin bucle); que el "Reintentar" posterior usa un tercer token; y que sin 401 el token se reutiliza. Con el código del paso 8, los tres tests del 401 fallan. `auth_service_test.dart` prueba la caducidad con un reloj falso, y también las dos opciones de depuración. Además se probaron las dos contra la API real: con el token falso, 42 responde 401, la app pide otro y carga el perfil; con la vida acortada, el token se reutiliza mientras vale y se pide otro al caducar.
+
+## Arreglo — Foto de perfil con el token (`lib/services/user_service.dart`, `lib/widgets/profile_header.dart`)
+
+**Qué pasaba:** la foto nunca cargaba y se veía siempre la inicial. Se creía que era culpa de la red de 42, pero el CDN de fotos (`cdn.intra.42.fr`) respondía 403 desde cualquier red y cliente (navegador, `curl`, móvil).
+
+**Causa:** el CDN ya no sirve las fotos de forma pública: exige el mismo token de la API en la cabecera `Authorization`. Sin token, 403; con `Authorization: Bearer <token>`, 200. Se comprobó con `curl` y en el emulador Android.
+
+**Qué se cambió:**
+- `UserService.imageHeaders()` devuelve `{'Authorization': 'Bearer <token>'}` con el token de `AuthService`. Es el token guardado: **no se pide uno nuevo** (el punto "Token API" de la corrección sigue cumpliéndose).
+- `ProfileScreen` carga el usuario y, justo después, las cabeceras (`_load()`, un record `(user, imageHeaders)`). Si pedir las cabeceras fallara, el perfil se muestra igual y la foto se queda en la inicial.
+- `ProfileHeader` pasa las cabeceras a `NetworkImage(image, headers: ...)`. La inicial se mantiene debajo como alternativa.
+- **Pruebas:** nuevo test en `user_service_test.dart`: tras `fetchUser`, `imageHeaders()` da el mismo token y solo se ha pedido un token. El servicio falso de los tests devuelve cabeceras vacías. Probado en el emulador Android (Pixel 8): la foto se ve, y en los logs aparece un único `token nuevo` en toda la sesión.
+
+## Paso 10 — Simulacro de defensa (preguntas y respuestas)
+
+Preguntas que puede hacer el evaluador, con la idea clave y una frase para responder. Orden: de lo general a lo concreto.
+
+### 1. ¿Cómo se autentica la app con la API de 42?
+**Idea:** OAuth2 `client_credentials`. La app envía su `client_id` y `client_secret` (`FT_UID`, `FT_SECRET`) con un `POST` a `/oauth/token`, recibe un token `bearer` de 2 h, lo guarda y lo envía en la cabecera `Authorization` de cada consulta.
+> "Mi app se identifica con su `client_id` y su secret mediante OAuth2 `client_credentials`. Recibe un token que dura 2 horas, lo guardo y lo envío en la cabecera `Authorization`. Cuando falta poco para que caduque, pido otro."
+
+### 2. ¿Por qué el secret no está en el código y qué limitación tiene el `.env`?
+**Idea:** el secret es privado, así que va en `.env`, que está en `.gitignore`; en el repo solo está `.env.example`. **Limitación real:** el `.env` se declara como *asset*, así que viaja dentro de la app compilada y alguien podría extraerlo. En producción iría en un backend.
+> "El secret está en `.env`, que no llega a GitHub. Pero al ser un asset va dentro de la app compilada. En producción iría en un backend; aquí lo asumo porque es lo que plantea el subject."
+
+### 3. ¿Qué pasa si el token caduca o la API lo revoca (401)?
+**Idea:** dos casos distintos.
+- **Caduca (2 h):** `AuthService` guarda la fecha y pide otro si faltan menos de 30 s. Ya estaba desde el paso 4 (no es el bonus).
+- **401 antes de tiempo:** `UserService` descarta el token, pide otro y repite la petición **una sola vez**. Es lo que añade el bonus; sin él, el usuario veía el error y pulsaba "Reintentar".
+
+Se resuelve en sitios distintos porque `AuthService` solo sabe cuándo debería caducar; quien recibe el 401 es `UserService`. Con `client_credentials` no hay *refresh token*: renovar es pedir otro token con las credenciales.
+> "Si la API da 401, descarto el token, pido otro y repito la petición. Solo una vez: si el nuevo también da 401, el problema no es el token y repetir sería un bucle infinito."
+
+### 4. ¿Cómo decides el layout y por qué `LayoutBuilder` y no `MediaQuery`?
+**Idea:** menos de 600 px, una columna; desde 600 px, dos columnas. `LayoutBuilder` da el espacio real del widget (sin `AppBar` ni `SafeArea`); `MediaQuery` da la pantalla entera. Se decide por ancho y no por orientación porque una tablet en vertical es más ancha que un móvil en horizontal. 600 px es el corte entre pantalla compacta y mediana de **Material 3** (el sistema de diseño de Google, integrado en Flutter).
+> "Uso `LayoutBuilder` porque me da el espacio real disponible. Decido por ancho y no por orientación, y el corte de 600 px es el de Material 3."
+
+### 5. ¿Qué pasa si quitas el `Expanded` de la `Row`?
+**Idea:** una `Row` da ancho ilimitado a sus hijos y una `ListView` necesita un ancho finito. Sin `Expanded`, Flutter lanza un error de layout. Con `Expanded`, cada columna recibe la mitad del ancho y tiene su propio scroll.
+> "Sin `Expanded`, la `ListView` recibe ancho ilimitado y Flutter lanza un error. Con `Expanded`, cada columna recibe la mitad del ancho disponible."
+
+### 6. ¿Por qué "Volver" en unos errores y "Reintentar" en otros?
+**Idea:** cada `ApiError` indica si repetir tiene sentido (`canRetry`). 404, credenciales y respuesta rara: repetir daría lo mismo, así que **Volver**. Sin red, timeout, 5xx, 429 y 401: puede funcionar, así que **Reintentar**. "Reintentar" **no reinicia la app**: vuelve a lanzar la misma petición (nuevo `Future` en `setState`).
+> "Cada error indica si repetir tiene sentido. Si el login no existe, repetir daría lo mismo; si falla la red, puede funcionar."
+
+### 7. ¿Cuál era la causa real de que la foto no cargara?
+**Idea:** el CDN `cdn.intra.42.fr` ya no es público: exige el mismo token de la API en `Authorization`. Sin token da 403; con token, 200. No era el navegador ni la red. Se arregló con `UserService.imageHeaders()` y `NetworkImage(headers: ...)`, **reutilizando el token guardado** (no se pide uno nuevo).
+> "El CDN exige el token de la API en la cabecera. Lo comprobé con `curl` y desde el móvil. Lo arreglé enviando esa cabecera con el token que ya tengo."
+
+### 8. ¿Por qué se sospechó de la red de 42 y cómo se descartó?
+**Idea:** el 403 apareció en la red de 42, lo que hizo pensar en un bloqueo del campus. Se descartó cambiando una variable cada vez: otra red (casa), otro cliente (navegador, `curl`, móvil) y la petición con el token. Daba 403 en todo salvo con el token.
+> "Sospeché de la red de 42, pero daba 403 desde casa y con cualquier cliente. Solo cambió a 200 al añadir el token."
+
+### 9. En Android el contenido se estira al llegar al final del scroll. ¿Es un fallo?
+**Idea:** no. Es el *stretch overscroll* nativo de Android 12+. No hay overflow (franjas amarillas y negras), y los tests de widgets lo respaldan: pasan a 360×740, 740×360 y 1280×800.
+> "Es el comportamiento nativo de Android al llegar al final de una lista, no un fallo de layout."
+
+### 10. ¿Por qué `ProfileScreen` guarda el `Future` en el estado y no lo crea en `build`?
+**Idea:** `build` se ejecuta muchas veces (girar el móvil, teclado, `setState`, cambio de cursus). Crear el `Future` ahí lanzaría una petición nueva cada vez: parpadeo, gasto de red y riesgo de 429 (límite de 2 por segundo). Solo se crea otro cuando el usuario pulsa "Reintentar", dentro de `setState` con llaves (con `=>` falla, porque devuelve un `Future`).
+> "Guardo el `Future` en el estado porque `build` se ejecuta en cada redibujado y lanzaría una petición nueva cada vez."
+
+### 11. ¿Cómo conviertes 7.65 en "Nivel 7 · 65 %" y por qué hay campos opcionales?
+**Idea:** la parte entera es el nivel y la decimal el porcentaje (`levelPercent`). Los campos `location`, `final_mark` y `validated?` pueden ser `null` (usuario fuera del campus, proyecto sin corregir), y los tipos opcionales obligan a tratarlo. `validated` es `bool?`, con tres estados: aprobado (verde), suspendido (rojo) y en curso (gris).
+> "La parte entera es el nivel y la decimal el porcentaje. Los campos pueden ser `null`, y con tipos opcionales la pantalla está obligada a tratarlos."
+
+### 12. ¿Qué cambiarías en producción?
+**Idea:** un **backend intermedio**. El secret viviría solo en el servidor (variables de entorno o gestor de secretos), que pediría el token y llamaría a 42; la app solo hablaría con él. Además, caché de respuestas para respetar el límite de 2 peticiones por segundo. Una base de datos solo haría falta para datos propios (usuarios, historial), no para guardar el secret.
+> "Lo primero sería mover el secret a un backend, porque ahora viaja dentro de la app. La app hablaría con mi servidor y este con 42."
+
+### Para repasar más
+Las que más cuestan: **3** (caducidad frente a 401, y qué añade el bonus), **4 y 5** (layout y `Expanded`) y **10** (`Future` en `build`).

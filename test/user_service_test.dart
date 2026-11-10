@@ -93,6 +93,32 @@ void main() {
     expect(user.projects.last.finalMark, isNull);
   });
 
+  test('la foto se pide con el mismo token, sin pedir otro', () async {
+    var tokens = 0;
+    final users = UserService(
+      auth: AuthService(
+        clientId: 'id',
+        clientSecret: 'secret',
+        client: MockClient((_) async {
+          tokens++;
+          return http.Response(
+            jsonEncode({'access_token': 'tok', 'expires_in': 7200}),
+            200,
+          );
+        }),
+      ),
+      client: MockClient(
+        (_) async => http.Response(jsonEncode(_userJson), 200),
+      ),
+    );
+
+    await users.fetchUser('jdoe');
+    final headers = await users.imageHeaders();
+
+    expect(headers, {'Authorization': 'Bearer tok'});
+    expect(tokens, 1);
+  });
+
   test('404 lanza ApiError.notFound', () async {
     final users = _service((_) => http.Response('{}', 404));
 
