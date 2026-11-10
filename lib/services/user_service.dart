@@ -67,6 +67,13 @@ class UserService {
     }
   }
 
+  /// Cabeceras para descargar la foto de perfil. El CDN de 42
+  /// (`cdn.intra.42.fr`) responde 403 si la petición no lleva el token de la
+  /// API. Es el mismo token guardado: no se pide uno nuevo.
+  Future<Map<String, String>> imageHeaders() async => {
+    'Authorization': 'Bearer ${await auth.getToken()}',
+  };
+
   /// Una petición con el token vigente (o uno nuevo si caducó).
   Future<http.Response> _get(String login) async {
     final token = await auth.getToken();

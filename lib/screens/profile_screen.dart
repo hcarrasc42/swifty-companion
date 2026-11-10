@@ -21,10 +21,13 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+/// Lo que necesita la pantalla: el usuario y las cabeceras para su foto.
+typedef _Profile = ({User user, Map<String, String> imageHeaders});
+
 class _ProfileScreenState extends State<ProfileScreen> {
   // Se guarda el Future en el estado: si se creara dentro de build(), cada
   // reconstrucción volvería a llamar a la API. Solo cambia al reintentar.
-  late Future<User> _user = widget.users.fetchUser(widget.login);
+  late Future<_Profile> _profile = _load();
 
   /// Cursus elegido en el selector. Mientras sea null se muestra el principal.
   int? _cursusId;
@@ -35,8 +38,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // abrió con Navigator.push: Flutter sabe que hay una ruta anterior.
     return Scaffold(
       appBar: AppBar(title: Text(widget.login)),
-      body: FutureBuilder<User>(
-        future: _user,
+      body: FutureBuilder<_Profile>(
+        future: _profile,
         builder: (context, snapshot) {
           // Primero el estado de carga: al reintentar, el snapshot conserva el
           // error anterior hasta que termina la nueva petición.
@@ -46,21 +49,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (snapshot.hasError) {
             return ErrorView(error: snapshot.error, onRetry: _retry);
           }
-          return _buildProfile(snapshot.data!);
+          final profile = snapshot.data!;
+          return _buildProfile(profile.user, profile.imageHeaders);
         },
       ),
     );
+  }
+
+  Future<_Profile> _load() async {
+    final user = await widget.users.fetchUser(widget.login);
+    // Justo después de fetchUser el token está guardado y vigente, así que
+    // esto no hace otra petición. Si aun así fallara, el perfil se muestra
+    // igual: la foto se queda en la inicial.
+    Map<String, String> headers;
+    try {
+      headers = await widget.users.imageHeaders();
+    } catch (_) {
+      headers = const {};
+    }
+    return (user: user, imageHeaders: headers);
   }
 
   void _retry() {
     // Con llaves y no con `=>`: setState no admite un callback que devuelva
     // un Future, y la flecha devolvería el valor de la asignación.
     setState(() {
-      _user = widget.users.fetchUser(widget.login);
+      _profile = _load();
     });
   }
 
-  Widget _buildProfile(User user) {
+  Widget _buildProfile(User user, Map<String, String> imageHeaders) {
     final cursus = _selectedCursus(user);
     // Cada proyecto indica a qué cursus pertenece; sin cursus se muestran todos.
     final projects = cursus == null
@@ -69,7 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             for (final p in user.projects)
               if (p.cursusIds.contains(cursus.id)) p,
           ];
-    final summary = _summarySection(user, cursus);
+    final summary = _summarySection(user, cursus, imageHeaders);
     final projectList = _projectsSection(projects);
 
     // SafeArea: en horizontal, el notch o la barra de gestos tapan los lados.
@@ -126,10 +144,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   /// Cabecera, selector de cursus y skills.
-  List<Widget> _summarySection(User user, Cursus? cursus) {
+  List<Widget> _summarySection(
+    User user,
+    Cursus? cursus,
+    Map<String, String> imageHeaders,
+  ) {
     final titleStyle = Theme.of(context).textTheme.titleMedium;
     return [
-      ProfileHeader(user: user, cursus: cursus),
+      ProfileHeader(user: user, cursus: cursus, imageHeaders: imageHeaders),
       if (user.cursus.length > 1) ...[
         const SizedBox(height: 16),
         DropdownButton<int>(

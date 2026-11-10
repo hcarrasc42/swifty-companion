@@ -16,6 +16,9 @@ class FakeUserService extends UserService {
   final List<Object> _errors;
 
   @override
+  Future<Map<String, String>> imageHeaders() async => const {};
+
+  @override
   Future<User> fetchUser(String login) async {
     if (_errors.isNotEmpty) throw _errors.removeAt(0);
     return user ??
