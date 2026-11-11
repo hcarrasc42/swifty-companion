@@ -234,5 +234,9 @@ Se resuelve en sitios distintos porque `AuthService` solo sabe cuándo debería 
 **Idea:** un **backend intermedio**. El secret viviría solo en el servidor (variables de entorno o gestor de secretos), que pediría el token y llamaría a 42; la app solo hablaría con él. Además, caché de respuestas para respetar el límite de 2 peticiones por segundo. Una base de datos solo haría falta para datos propios (usuarios, historial), no para guardar el secret.
 > "Lo primero sería mover el secret a un backend, porque ahora viaja dentro de la app. La app hablaría con mi servidor y este con 42."
 
+### 13. ¿Por qué añadiste el permiso `INTERNET` si en debug ya funcionaba?
+**Idea:** Android solo deja usar la red a las apps que declaran `INTERNET` en su `AndroidManifest.xml`. Flutter lo pone por su cuenta en los manifiestos de `debug/` y `profile/`, porque los necesita para conectarse con la app mientras desarrollas, pero no en `main/`, que es el que usa la versión de release. Sin él, `flutter run` funcionaba, pero con `flutter run --release` o la APK de `flutter build apk` la app abría y cada búsqueda daba "Sin conexión con la API de 42". El manifiesto lo genera `flutter create`, pero es la configuración de la app y los permisos los declara el desarrollador, como indica la documentación de Flutter.
+> "En debug Flutter añade el permiso de Internet por su cuenta, pero en release no. Mi app necesita la red para llamar a la API de 42, así que lo declaro en el manifiesto principal."
+
 ### Para repasar más
 Las que más cuestan: **3** (caducidad frente a 401, y qué añade el bonus), **4 y 5** (layout y `Expanded`) y **10** (`Future` en `build`).

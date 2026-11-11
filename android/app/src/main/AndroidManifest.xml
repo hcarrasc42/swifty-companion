@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- La app consulta la API de 42: sin este permiso, en release no hay red. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="swifty_companion"
         android:name="${applicationName}"
